@@ -1,0 +1,11 @@
+.*
+*.pyc
+**parse_table_datacmds.py
+gurobi.log
+switch_model.egg-info/
+venv
+build*/
+dist*/
+autodoc*
+!.gitignore
+!.git-blame-ignore-revs
