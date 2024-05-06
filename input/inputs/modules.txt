@@ -9,6 +9,7 @@ switch_model.reporting
 # Custom Modules
 switch_model.mymodel.my_merge
 switch_model.mymodel.my_fuel_cost
+switch_model.generators.core.commit.fuel_use
 switch_model.mymodel.my_co2_cost
 switch_model.transmission.local_td
 switch_model.mymodel.my_transmission

@@ -41,6 +41,9 @@ def define_components(mod):
     )
     mod.gen_full_load_heat_rate = Param(mod.FUEL_BASED_GENS, within=NonNegativeReals)
     
+    mod.gen_startup_fuel = Param(
+        mod.FUEL_BASED_GENS, default=0.0, within=NonNegativeReals
+    )
      
     mod.MULTIFUEL_GENS = Set(
         dimen=1,
@@ -156,7 +159,7 @@ def load_inputs(mod, switch_data, inputs_dir):
         param=(
             mod.gen_energy_source,
             mod.gen_full_load_heat_rate,
-            
+            mod.gen_startup_fuel
         ),
     )
 

@@ -370,6 +370,9 @@ def define_components(mod):
     mod.str_overnight_cost = Param(
         mod.STR_BLD_YRS, within=NonNegativeReals
     )
+    mod.str_connect_cost_per_mw = Param(
+        mod.STORAGE_GENS, within=NonNegativeReals
+    )    
     mod.min_data_check("str_overnight_cost")    
     
     mod.StorageEnergyCapitalCost = Expression(
@@ -377,7 +380,7 @@ def define_components(mod):
         mod.PERIODS,
         rule=lambda m, g, p: sum(
             m.BuildStorageEnergy[g, bld_yr]
-            * m.str_overnight_cost[g, bld_yr]
+            * (m.str_overnight_cost[g, bld_yr] + m.str_connect_cost_per_mw[g])
             * crf(m.interest_rate, m.str_max_age[g])
             for bld_yr in m.BLD_YRS_FOR_STR_PERIOD[g, p]
         ),
@@ -457,7 +460,8 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.storage_max_power_mw,
             mod.str_is_distributed,
             mod.str_is_grid_connected,
-            mod.str_is_reconnected
+            mod.str_is_reconnected,
+            mod.str_connect_cost_per_mw
         ),
     )
 

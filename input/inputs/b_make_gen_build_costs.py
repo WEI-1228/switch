@@ -3,10 +3,15 @@ import copy
 
 header, datas = utils.parse_input('gen_build_costs_bak.csv')
 
+header, datas = utils.do_filter(header, datas,
+                                remove_condition={"GENERATION_PROJECT":["Hydro_Pumped"]})
+
 common_data = []
 storage_data = []
 
 for data in datas:
+    if not data[1] <= '2023':
+        continue
     if 'Battery_Storage' in data[0]:
         t = data[0]
         data[0] = t + '-1'

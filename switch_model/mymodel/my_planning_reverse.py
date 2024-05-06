@@ -172,7 +172,7 @@ def define_components(model):
             # distributed generation to central grid capacity because it will
             # be credited with adjusting load at the distribution node.
             elif m.str_is_reconnected[g]:
-                pass
+                reserve_cap += m.DischargeStorage[g, t] - m.ChargeStorage[g, t]
             else:
                 reserve_cap += m.DischargeStorage[g, t] - m.ChargeStorage[g, t]
             
