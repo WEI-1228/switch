@@ -83,6 +83,7 @@ def define_components(mod):
         within=NonNegativeReals,
         bounds=bounds_BuildStorageEnergy,
     )
+    
     # 当前储能的累计容量
     mod.StorageEnergyCapacity = Expression(
         mod.STORAGE_GENS,
@@ -373,8 +374,9 @@ def define_components(mod):
     mod.str_connect_cost_per_mw = Param(
         mod.STORAGE_GENS, within=NonNegativeReals
     )    
-    mod.min_data_check("str_overnight_cost")    
-    
+    mod.min_data_check("str_overnight_cost")
+        
+    # 固定资本成本，这里有必要算上这个利率吗，还是目标函数里已经考虑了这种
     mod.StorageEnergyCapitalCost = Expression(
         mod.STORAGE_GENS,
         mod.PERIODS,
@@ -389,9 +391,28 @@ def define_components(mod):
         mod.PERIODS,
         rule=lambda m, p: sum(m.StorageEnergyCapitalCost[g, p] for g in m.STORAGE_GENS),
     )
-    mod.Cost_Components_Per_Period.append("StorageEnergyFixedCost")
+    mod.Cost_Components_Per_Period.append("StorageEnergyFixedCost")  
 
-    # 储能的运维成本
+    # 固定运维成本
+    mod.str_fixed_om = Param(mod.STR_BLD_YRS, within=NonNegativeReals)
+    mod.StrOMCosts = Expression(
+        mod.STORAGE_GENS,
+        mod.PERIODS,
+        rule=lambda m, g, p: sum(
+            m.BuildStorageEnergy[g, bld_yr] * m.str_fixed_om[g, bld_yr]
+            for bld_yr in m.BLD_YRS_FOR_STR_PERIOD[g, p]
+        ),
+    )  
+    mod.StrFixedOMCosts = Expression(
+        mod.PERIODS,
+        rule=lambda m, p: sum(
+            m.StrOMCosts[g, p] for g in m.STORAGE_GENS
+        ),
+    )   
+
+    mod.Cost_Components_Per_Period.append("StrFixedOMCosts")    
+
+    # 储能的可变运维成本，暂时不用管
     def period_active_str_rule(m, period):
         if not hasattr(m, "period_active_str_dict"):
             m.period_active_str_dict = dict()
@@ -468,7 +489,10 @@ def load_inputs(mod, switch_data, inputs_dir):
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, "str_build_costs.csv"),
         index=mod.STR_BLD_YRS,
-        param=(mod.str_overnight_cost),
+        param=(
+            mod.str_overnight_cost,
+            mod.str_fixed_om
+            ),
     )
     
     switch_data.load_aug(

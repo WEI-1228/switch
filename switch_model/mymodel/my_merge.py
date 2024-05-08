@@ -441,7 +441,7 @@ def define_components(mod):
     mod.VariableCost = Expression(
         mod.TIMEPOINTS,
         rule=lambda m, t: sum(
-            (m.DispatchUpperLimit[g, t] - m.DispatchGen[g, t]) * m.variable_gen_cost[g]
+            (m.DispatchUpperLimit[g, t] - m.DispatchGen[g, t]) * m.variable_gen_cost[g]/ m.tp_duration_hrs[t]
                 for g in m.GENS_IN_PERIOD[m.tp_period[t]])
     )
     
@@ -468,7 +468,8 @@ def define_components(mod):
             * crf(m.interest_rate, m.gen_max_age[g])
         ),
     )
-
+    
+    # 资本成本
     mod.GenCapitalCosts = Expression(
         mod.GENERATION_PROJECTS,
         mod.PERIODS,
@@ -477,6 +478,8 @@ def define_components(mod):
             for bld_yr in m.BLD_YRS_FOR_GEN_PERIOD[g, p]
         ),
     )
+    
+    # 固定运维成本
     mod.GenFixedOMCosts = Expression(
         mod.GENERATION_PROJECTS,
         mod.PERIODS,
@@ -485,7 +488,7 @@ def define_components(mod):
             for bld_yr in m.BLD_YRS_FOR_GEN_PERIOD[g, p]
         ),
     )
-
+    # 总的固定成本：资本成本+固定运维成本
     mod.TotalGenFixedCosts = Expression(
         mod.PERIODS,
         rule=lambda m, p: sum(

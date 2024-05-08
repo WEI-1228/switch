@@ -17,11 +17,10 @@ for line in fin:
         
         gen_can_provide_spinning_reserves = header.index("gen_can_provide_spinning_reserves")
         gen_energy_source = header.index("gen_energy_source")
-        if sp[gen_can_provide_spinning_reserves] == 'TRUE':
-            if sp[gen_energy_source] == 'Gas':
-                pass
-            else:
-                sp[gen_can_provide_spinning_reserves] = 'FALSE'
+        if sp[gen_energy_source] in ['Coal', 'Gas', 'Uranium']:
+            sp[gen_can_provide_spinning_reserves] = 'TRUE'
+        else:
+            sp[gen_can_provide_spinning_reserves] = 'FALSE'
         output_data.append(sp)
 
 header, output_data = utils.do_filter(header, output_data,
