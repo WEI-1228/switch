@@ -11,3 +11,5 @@ autodoc*
 !.git-blame-ignore-revs
 outputs*
 input*
+*.jpg
+*.png
