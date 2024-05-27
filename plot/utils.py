@@ -50,6 +50,19 @@ def filter_by_zone_and_type(data_list:list, zone:str, etype:str, tps=None):
             filter_data.append(data)
     return filter_data
 
+def filter_by_zone(data_list:list, zone:str, tps=None):
+    """
+    根据地区和该地区的能源类型过滤数据\n
+    时间点是可选的参数\n
+    必须保证数据的第一列包含地区和能源类型的信息
+    """
+    filter_data = []
+    for data in data_list:
+        if zone in data[0]:
+            if tps and tps not in data[1]:
+                continue
+            filter_data.append(data)
+    return filter_data
 
 def merge_data_by_tps(data_list, norm_factor=1):
     """
@@ -81,12 +94,21 @@ def plot_by_tps(dataObj, title, xlabel, ylabel, save_path):
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.xticks(range(len(tps_list)), labels=tps_list)
-    
+    ymax = 0
     for data in dataObj:
-        plt.plot(range(len(tps_list)), data.get_value_list(), label=data.annotation, marker=data.marker)
+        pltdata = data.get_value_list()
+        if pltdata:
+            ymax = max(ymax, max(pltdata))
+        plt.plot(range(len(tps_list)), pltdata, label=data.annotation, marker=data.marker)
+    if ymax < 1000:
+        ymax = ymax + 100
+    else:
+        ymax = ymax + 1000
+    plt.ylim((0, ymax))
     
     plt.tight_layout()
-    plt.legend()
+    if len(dataObj) > 1:
+        plt.legend()
     
     plt.savefig(save_path, dpi=300)
     plt.clf()
