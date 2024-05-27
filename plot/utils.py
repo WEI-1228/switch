@@ -1,18 +1,21 @@
 import matplotlib.pyplot as plt
 
 class DataObj:
-    def __init__(self, data, annotation, mark):
+    def __init__(self, data, annotation, marker, tps):
         self.data = data
         self.annotation = annotation
-        self.mark=mark
+        self.marker=marker
+        self.tps = tps
         
     def get_tps_list(self):
         tps_list = list(self.data.keys())
         tps_list.sort()
-        return tps_list
+        date = self.tps if self.tps else "AVG"
+        return tps_list, date
     
     def get_value_list(self):
-        tps_list = self.get_tps_list()
+        tps_list = list(self.data.keys())
+        tps_list.sort()
         data_list = [self.data[tps] for tps in tps_list]
         return data_list
 
@@ -48,16 +51,18 @@ def filter_by_zone_and_type(data_list:list, zone:str, etype:str, tps=None):
     return filter_data
 
 
-def merge_data_by_tps(data_list):
+def merge_data_by_tps(data_list, norm_factor=1):
     """
     根据时间点合并数据，将同一个时间点的数据全部加起来\n
     返回：{tps1: v1, tps2: v2, ...}
     """
     data_dict = {}
     for _, tps, v in data_list:
-        if tps not in data_dict:
-            data_dict[tps] = 0
-        data_dict[tps] += float(v)
+        h = tps[-2:]
+        if h not in data_dict:
+            data_dict[h] = 0
+        data_dict[h] += float(v) / norm_factor
+    
     return data_dict
 
 
@@ -69,14 +74,16 @@ def plot_by_tps(dataObj, title, xlabel, ylabel, save_path):
     """
     if isinstance(dataObj, DataObj):
         dataObj = [dataObj]
-    plt.title(title)
+    
+    tps_list, notation = dataObj[0].get_tps_list()
+    
+    plt.title(title + '-' + notation)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    tps_list = dataObj[0].get_tps_list()
-    plt.xticks(range(len(tps_list)), labels=tps_list, rotation=45, ha='right')
+    plt.xticks(range(len(tps_list)), labels=tps_list)
     
     for data in dataObj:
-        plt.plot(range(len(tps_list)), data.get_value_list(), label=data.annotation, marker=data.mark)
+        plt.plot(range(len(tps_list)), data.get_value_list(), label=data.annotation, marker=data.marker)
     
     plt.tight_layout()
     plt.legend()
