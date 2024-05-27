@@ -104,22 +104,16 @@ def define_components(m):
         except AttributeError:
             load = m.lz_demand_mw
         return 0.03 * sum(load[z, t] for z in m.LOAD_ZONES if b == m.zone_balancing_area[z])\
-        + 0.03 * sum(
-            (m.ChargeStorage[g,t]-m.DischargeStorage[g,t])
-            for z in m.LOAD_ZONES if b == m.zone_balancing_area[z]
-            for g in m.STR_IN_ZONE[z]
-            if m.str_is_distributed[g]
-        )\
         + 0.05 * sum(
             m.DispatchGen[g, t]
             for g in m.VARIABLE_GENS
             if (g, t) in m.VARIABLE_GEN_TPS and b == m.zone_balancing_area[m.gen_load_zone[g]]
+        )\
+        + 0.03 * sum(
+            (m.ChargingPower[ev, t] - m.DischargingPower[ev, t])
+            for z in m.LOAD_ZONES if b == m.zone_balancing_area[z]
+            for ev in m.EV_IN_ZONE[z]
         )
-        # + 0.03 * sum(
-        #     (m.ChargingPower[ev, t] - m.DischargingPower[ev, t])
-        #     for z in m.LOAD_ZONES if b == m.zone_balancing_area[z]
-        #     for ev in m.EV_IN_ZONE[z]
-        # )
 
     m.NREL35VarGenSpinningReserveRequirement = Expression(
         m.BALANCING_AREA_TIMEPOINTS, rule=NREL35VarGenSpinningReserveRequirement_rule

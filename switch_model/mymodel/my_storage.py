@@ -16,13 +16,13 @@ def define_components(mod):
     # 储能设施集合，是根据储能效率来识别储能的g
     mod.STORAGE_GENS = Set(dimen=1)
     mod.str_storage_efficiency = Param(mod.STORAGE_GENS, within=PercentFraction) 
+    mod.PREDETERMINED_STR_BLD_YRS = Set(dimen=2)
 
-    ######
-
-    mod.build_gen_energy_predetermined = Param(
-        mod.PREDETERMINED_GEN_BLD_YRS, within=NonNegativeReals
+    #####
+    mod.build_str_energy_predetermined = Param(
+        mod.PREDETERMINED_STR_BLD_YRS, within=NonNegativeReals
     )
-    mod.min_data_check("build_gen_predetermined")    
+    # mod.min_data_check("build_str_predetermined")    
     mod.str_max_age = Param(mod.STORAGE_GENS, within=PositiveIntegers)
     
     mod.str_is_distributed = Param(
@@ -40,7 +40,7 @@ def define_components(mod):
     mod.STR_BLD_YRS = Set(
         dimen=2,
         validate=lambda m, g, bld_yr: (
-            (g, bld_yr) in m.PREDETERMINED_GEN_BLD_YRS
+            (g, bld_yr) in m.PREDETERMINED_STR_BLD_YRS
             or (g, bld_yr) in m.STORAGE_GENS * m.PERIODS
         ),
     )
@@ -69,10 +69,10 @@ def define_components(mod):
 
     # 储能新建容量的约束
     def bounds_BuildStorageEnergy(m, g, bld_yr):
-        if (g, bld_yr) in m.build_gen_energy_predetermined:
+        if (g, bld_yr) in m.build_str_energy_predetermined:
             return (
-                m.build_gen_energy_predetermined[g, bld_yr],
-                m.build_gen_energy_predetermined[g, bld_yr],
+                m.build_str_energy_predetermined[g, bld_yr],
+                m.build_str_energy_predetermined[g, bld_yr],
             )
         else:
             return (0, None)
@@ -147,29 +147,121 @@ def define_components(mod):
     )
     # 充电功率约束
     # 存储项目的最大充放电功率
-    mod.storage_max_power_mw = Param(
-        mod.STORAGE_GENS, within=NonNegativeReals
-    )
+    # mod.storage_max_power_mw = Param(
+    #     mod.STORAGE_GENS, within=NonNegativeReals
+    # )
 
-    def Charge_Storage_Upper_Limit_rule(m, g, t):
-        return (
-            m.ChargeStorage[g, t]
-            <= m.storage_max_power_mw[g] * m.StorageCharge[g, t]
-        )
+    # def Charge_Storage_Upper_Limit_rule(m, g, t):
+    #     return (
+    #         m.ChargeStorage[g, t]
+    #         <= m.storage_max_power_mw[g] * m.StorageCharge[g, t]
+    #     )
 
-    mod.Charge_Storage_Upper_Limit = Constraint(
-        mod.STR_TPS, rule=Charge_Storage_Upper_Limit_rule
-    )
-    def Discharge_Storage_Upper_Limit_rule(m, g, t):
-        return (
-            m.DischargeStorage[g, t]
-            <= m.storage_max_power_mw[g] * m.StorageDischarge[g, t]
-        )
+    # mod.Charge_Storage_Upper_Limit = Constraint(
+    #     mod.STR_TPS, rule=Charge_Storage_Upper_Limit_rule
+    # )
+    # def Discharge_Storage_Upper_Limit_rule(m, g, t):
+    #     return (
+    #         m.DischargeStorage[g, t]
+    #         <= m.storage_max_power_mw[g] * m.StorageDischarge[g, t]
+    #     )
 
-    mod.Discharge_Storage_Upper_Limit = Constraint(
-        mod.STR_TPS, rule=Discharge_Storage_Upper_Limit_rule
+    # mod.Discharge_Storage_Upper_Limit = Constraint(
+    #     mod.STR_TPS, rule=Discharge_Storage_Upper_Limit_rule
+    # )
+    
+    #####重新写一下这个存储的规则 
+    
+    # TODO
+    mod.str_is_baseload = Param(mod.STORAGE_GENS, within=Boolean, default=False)
+    mod.str_max_commit_fraction = Param(
+        mod.STR_TPS, within=PercentFraction, default=lambda m, g, t: 1.0
     )
+    mod.str_min_commit_fraction = Param(
+        mod.STR_TPS, within=PercentFraction, default=lambda m, g, t: 0.0
+    )
+    # 这一大串都是为了commit的上下限。
+    mod.str_scheduled_outage_rate = Param(
+        mod.STORAGE_GENS, within=PercentFraction, default=0
+    )
+    mod.str_forced_outage_rate = Param(
+        mod.STORAGE_GENS, within=PercentFraction, default=0
+    )
+    mod.StorageEnergyCapacityInTP = Expression(
+        mod.STR_TPS, rule=lambda m, g, t: m.StorageEnergyCapacity[g, m.tp_period[t]]
+    )      
+    # 强制停运率和计划停运率，在gen info里输入
+    def init_str_availability(m, g):
+        if m.str_is_baseload[g]:
+            return (1 - m.str_forced_outage_rate[g]) * (
+                1 - m.str_scheduled_outage_rate[g]
+            )
+        else:
+            return 1 - m.str_forced_outage_rate[g]
+
+    mod.str_availability = Param(
+        mod.STORAGE_GENS,
+        within=NonNegativeReals,
+        initialize=init_str_availability,
+    )
+        
+    mod.CommitLowerLimit1 = Expression(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (
+            m.StorageEnergyCapacityInTP[g, t]
+            * m.str_availability[g]
+            * m.str_min_commit_fraction[g, t]
+        ),
+    )
+    # 充放电最大功率按照，储能当前时间点累计容量的0.25设置
+    mod.CommitUpperLimit2 = Expression(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (
+            m.StorageEnergyCapacityInTP[g, t]
+            * m.str_availability[g]
+            * m.str_max_commit_fraction[g, t]
+            * 0.25
+        ),
+    )
+    ###### 放电功率约束 大于0，小于累计容量*0.25，
+    mod.Enforce_Dis_Lower_Limit1 = Constraint(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (m.CommitLowerLimit1[g, t] <= m.DischargeStorage[g, t]),
+    )
+    mod.Enforce_Dis_Upper_Limit2 = Constraint(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (m.DischargeStorage[g, t] <= m.CommitUpperLimit2[g, t]),
+    ) 
+    # 充电功率约束 同理
+    mod.Enforce_Char_Lower_Limit1 = Constraint(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (m.CommitLowerLimit1[g, t] <= m.ChargeStorage[g, t]),
+    )
+    mod.Enforce_Char_Upper_Limit2 = Constraint(
+        mod.STR_TPS,
+        rule=lambda m, g, t: (m.ChargeStorage[g, t] <= m.CommitUpperLimit2[g, t]),
+    )
+    
     # 是否充电 + 是否放电 >= 0，表示两个二进制变量可以都为0，也可以都不为0
+    # 如果m.DischargeStorage[g, t]=0，则m.StorageDischarge[g, t]=0
+    # 如果m.ChargeStorage[g, t]=0，则m.StorageCharge[g, t]=0
+    
+    def tmp_discharge_constraint(m, g, t):
+        M = 1000000
+        return m.DischargeStorage[g, t] <= M * m.StorageDischarge[g, t]
+        
+    mod.EnsureDischargeState_Constraint = Constraint(
+        mod.STR_TPS, rule=tmp_discharge_constraint
+    )
+    
+    def tmp_charge_constraint(m, g, t):
+        M = 1000000
+        return m.ChargeStorage[g, t] <= M * m.StorageCharge[g, t]
+        
+    mod.EnsureChargeState_Constraint = Constraint(
+        mod.STR_TPS, rule=tmp_charge_constraint
+    )
+    
     mod.Charge_or_Discharge_Constraint_1 = Constraint(
         mod.STR_TPS,
         rule=lambda m, g, t: m.StorageCharge[g, t] + m.StorageDischarge[g, t] >= 0
@@ -223,7 +315,7 @@ def define_components(mod):
     mod.STR_IN_ZONE = Set(mod.LOAD_ZONES, dimen=1, initialize=STR_IN_ZONE_init)
     
     mod.RESTORAGE = Set(
-        mod.STORAGE_GENS,
+        initialize=mod.STORAGE_GENS,
         dimen=1,      
         filter=lambda m, g: m.str_is_reconnected[g]
     )
@@ -270,18 +362,154 @@ def define_components(mod):
             m.REBatteryCentralCharge[z, t] <= m.RenewableDispatchZone[z, t] 
     )
     
+    # 按照可再生能源建造量的0.05来建立新能源配储，其实wind和solar就是variablegen
+    def RE_Constraint(m, str, bld_yr):
+        if m.str_is_reconnected[str]:
+            z = m.str_load_zone[str]
+            s = 0
+            for g, bld_yr_g in m.NEW_GEN_BLD_YRS:
+                if bld_yr == bld_yr_g and m.gen_load_zone[g] == z and m.gen_energy_source[g] in ['Solar', 'Wind']:
+                    s += m.BuildGen[g, bld_yr]
+            return m.BuildStorageEnergy[str, bld_yr] == s * 0.05
+        else:
+            return Constraint.Skip
+
+    mod.RE_Build_Capacity_Constraint = Constraint(
+        mod.STR_BLD_YRS, rule=RE_Constraint
+    )
     
     # 电网侧储能：能够提供旋转储备，平衡约束在中心节点上
     mod.GRIDSTORAGE = Set(
-        mod.STORAGE_GENS,
-        dimen=1,        
+        initialize=mod.STORAGE_GENS,
+        dimen=1,
         filter=lambda m, g: m.str_is_grid_connected[g]
     )
+    # 输入z得到z上的电网侧储能
     mod.GRIDSTORAGE_IN_ZONE = Set(
         mod.LOAD_ZONES,
         dimen=1,
         initialize=lambda m, z: [g for g in m.STR_IN_ZONE[z] if m.str_is_grid_connected[g]],
     )
+    # 一个可用的g和时间点的集合（g,tp）
+    mod.GRIDSTORAGE_TPS = Set(
+        dimen=2,
+        initialize=lambda m: (
+            (g, tp) for g in m.GRIDSTORAGE for tp in m.TPS_FOR_STR[g]
+        ),
+    )   
+    # 新设置一个非需求端储能的集合，即源网侧储能集合
+    mod.RE_WITH_GRIDSTORAGE=Set(
+        initialize=mod.STORAGE_GENS,
+        dimen=1,
+        filter=lambda m, g : not m.str_is_distributed[g]
+    )
+    # 输入z得到z上的源网侧储能
+    mod.RE_WITH_GRIDSTORAGE_IN_ZONE = Set(
+        mod.LOAD_ZONES,
+        dimen=1,
+        initialize=lambda m, z: [g for g in m.STR_IN_ZONE[z] if not m.str_is_distributed[g]],
+    )    
+    # 一个可用的g和时间点的集合（g,tp）
+    mod.RE_WITH_GRIDSTORAGE_TPS = Set(
+        dimen=2,
+        initialize=lambda m: (
+            (g, tp) for g in m.RE_WITH_GRIDSTORAGE for tp in m.TPS_FOR_STR[g]
+        ),
+    ) 
+
+    
+    def init_gen_zone_timepoint(m):
+        candidate = []
+        for zone_from, zone_to in m.DIRECTIONAL_TX:
+            for g in m.RE_WITH_GRIDSTORAGE_IN_ZONE[zone_from]:
+                for t in m.TIMEPOINTS:
+                    candidate.append((g, zone_to, t))
+        return candidate
+        
+    mod.RE_WITH_GRIDGEN_ZONE_TIMEPOINTS = Set(
+        initialize=init_gen_zone_timepoint,
+        dimen=3
+    )
+    
+    # 是不是用源网侧储能集合代替电网侧储能集合mod.RE_WITH_GRIDSTORAGE
+    mod.GenDispatchStorage = Var(
+        mod.RE_WITH_GRIDGEN_ZONE_TIMEPOINTS,
+        within=NonNegativeReals
+    )
+    
+    # mod.RE_WITH_GRIDSTORAGE_IN_ZONE,mod.RE_WITH_GRIDSTORAGE_TPS
+    def exp111(m, zone_from, zone_to, tps):
+        s = 0
+        for g in m.RE_WITH_GRIDSTORAGE_IN_ZONE[zone_from]:
+            if tps in m.TPS_FOR_STR[g]:
+                s += m.GenDispatchStorage[g, zone_to, tps]
+        return s
+    
+    # jiangxi -> anhui
+    # g1 g2
+    # dispatch[t] = dis[g1][anhui][t] + dis[g2][anhui][t]
+    mod.DispatchStorage = Expression(
+        mod.TRANS_TIMEPOINTS,
+        rule=exp111
+    )
+    
+    def rule138(m, z, t):
+        sum_dispatch = 0
+        sum_discharge = 0
+        for zone_from, zone_to in m.DIRECTIONAL_TX:
+            if zone_from == z:
+                sum_dispatch += m.DispatchStorage[zone_from, zone_to, t]
+        # mod.RE_WITH_GRIDSTORAGE_IN_ZONE
+        for g in m.RE_WITH_GRIDSTORAGE_IN_ZONE[z]:
+            if t in m.TPS_FOR_STR[g]:
+                sum_discharge += m.DischargeStorage[g, t]
+        return sum_dispatch <= sum_discharge
+    
+    mod.Constraint138=Constraint(
+        mod.LOAD_ZONES,
+        mod.TIMEPOINTS,
+        rule=rule138
+    )
+    
+    # 调度至其他区域的电量应该小于传输线路的容量
+    mod.Maximum_DispatchStorage1 = Constraint(
+        mod.TRANS_TIMEPOINTS,
+        rule=lambda m, zone_from, zone_to, tp: (
+            m.DispatchStorage[zone_from, zone_to, tp]+ m.DispatchTx[zone_from, zone_to, tp]
+            <= m.TxCapacityNameplateAvailable[
+                m.trans_d_line[zone_from, zone_to], m.tp_period[tp]
+            ]
+        ),
+    )
+
+    # 输入zone from和zone to，得到传输出去的量
+    mod.StoragePowerSent = Expression(
+        mod.TRANS_TIMEPOINTS,
+        rule=lambda m, zone_from, zone_to, tp: (m.DispatchStorage[zone_from, zone_to, tp]),
+    )
+    # 收到的调度量等于传输的量还要x传输效率
+    mod.StoragePowerReceived = Expression(
+        mod.TRANS_TIMEPOINTS,
+        rule=lambda m, zone_from, zone_to, tp: (
+            m.DispatchStorage[zone_from, zone_to, tp]
+            * m.trans_efficiency[m.trans_d_line[zone_from, zone_to]]
+        ),
+    )
+    # 计算净传输到区域z的储能容量，等于所有从别的区域收到的传输量，减去区域z传输出去的量
+    def StoragePowerNet_calculation(m, z, tp):
+        return sum(
+            m.StoragePowerReceived[zone_from, z, tp]
+            for zone_from in m.TX_CONNECTIONS_TO_ZONE[z]
+        ) - sum(
+            m.StoragePowerSent[z, zone_to, tp] for zone_to in m.TX_CONNECTIONS_TO_ZONE[z]
+        )
+
+    mod.StoragePowerNet = Expression(
+        mod.LOAD_ZONES, mod.TIMEPOINTS, rule=StoragePowerNet_calculation
+    )
+    mod.Zone_Power_Injections.append("StoragePowerNet") 
+
+    # TODO 平衡约束还嘚改        
     ##########平衡约束
     # 区域z和时间点t上的储能净充电量，添加到区域平衡约束中，添加到中心节点的提取
     def rule1(m, z, t):
@@ -302,25 +530,26 @@ def define_components(mod):
 
     ################平衡约束
     # 区域z和时间点t上的储能净放电量，添加到中心节点的注入
-    def rule2(m, z, t):
-        # Construct and cache a set for summation as needed
-        if not hasattr(m, "Storage_DisCharge_Summation_dict"):
-            m.Storage_DisCharge_Summation_dict = collections.defaultdict(set)
-            for g, t2 in m.STR_TPS:
-                z2 = m.str_load_zone[g]
-                m.Storage_DisCharge_Summation_dict[z2, t2].add(g)
-        relevant_projects = m.Storage_DisCharge_Summation_dict.pop((z, t), {})
-        return sum(m.DischargeStorage[g, t] for g in relevant_projects if not m.str_is_distributed[g])
+    # def rule2(m, z, t):
+    #     # Construct and cache a set for summation as needed
+    #     if not hasattr(m, "Storage_DisCharge_Summation_dict"):
+    #         m.Storage_DisCharge_Summation_dict = collections.defaultdict(set)
+    #         for g, t2 in m.STR_TPS:
+    #             z2 = m.str_load_zone[g]
+    #             m.Storage_DisCharge_Summation_dict[z2, t2].add(g)
+    #     relevant_projects = m.Storage_DisCharge_Summation_dict.pop((z, t), {})
+    #     return sum(m.DischargeStorage[g, t] for g in relevant_projects if not m.str_is_distributed[g])
 
-    mod.StorageNetDisCharge = Expression(mod.LOAD_ZONES, mod.TIMEPOINTS, rule=rule2)
-    # Register net charging with zonal energy balance. Discharging is already
-    # covered by DispatchGen.
-    mod.Zone_Power_Injections.append("StorageNetDisCharge") 
-#############    
+    # mod.StorageNetDisCharge = Expression(mod.LOAD_ZONES, mod.TIMEPOINTS, rule=rule2)
+    # # Register net charging with zonal energy balance. Discharging is already
+    # # covered by DispatchGen.
+    # mod.Zone_Power_Injections.append("StorageNetDisCharge") 
+#############   
+
 
     # 需求侧储能：削峰填谷，平衡约束在分布式节点上
     mod.DISSTORAGE = Set(
-        mod.STORAGE_GENS,
+        initialize=mod.STORAGE_GENS,
         dimen=1,        
         filter=lambda m, g: m.str_is_distributed[g]
     )
@@ -478,11 +707,15 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.str_load_zone,
             mod.str_tech,
             mod.str_variable_om,
-            mod.storage_max_power_mw,
+            # mod.storage_max_power_mw,
             mod.str_is_distributed,
             mod.str_is_grid_connected,
             mod.str_is_reconnected,
-            mod.str_connect_cost_per_mw
+            mod.str_connect_cost_per_mw,
+            mod.str_is_baseload,
+            mod.str_forced_outage_rate,
+            mod.str_scheduled_outage_rate,
+            mod.str_min_commit_fraction
         ),
     )
 
@@ -495,8 +728,14 @@ def load_inputs(mod, switch_data, inputs_dir):
             ),
     )
     
+    # switch_data.load_aug(
+    #     optional=True,
+    #     filename=os.path.join(inputs_dir, "gen_build_predetermined.csv"),
+    #     param=(mod.build_gen_energy_predetermined,),
+    # )
     switch_data.load_aug(
         optional=True,
-        filename=os.path.join(inputs_dir, "gen_build_predetermined.csv"),
-        param=(mod.build_gen_energy_predetermined,),
-    )
+        filename=os.path.join(inputs_dir, "str_build_predetermined.csv"),
+        index=mod.PREDETERMINED_STR_BLD_YRS,
+        param=(mod.build_str_energy_predetermined),
+    )    

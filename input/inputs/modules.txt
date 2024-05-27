@@ -17,4 +17,4 @@ switch_model.mymodel.my_storage
 # switch_model.mymodel.my_ev
 switch_model.mymodel.my_planning_reverse
 switch_model.mymodel.my_spinning_reverse
-switch_model.balancing.diagnose_infeasibility
+# switch_model.balancing.diagnose_infeasibility

@@ -198,13 +198,13 @@ def define_components(model):
                 for z in ZONES
                 for g in m.STR_IN_ZONE[z] if m.str_is_distributed[g]
                 
-            ) 
-            """+ sum(
+            ) \
+            + sum(
                 (1 + m.prr_cap_reserve_margin[prr]) * 
                 (m.ChargingPower[ev, t] - m.DischargingPower[ev, t])
                 for z in ZONES
                 for ev in m.EV_IN_ZONE[z]
-            )"""
+            )
         else:
             return sum(
                 (1 + m.prr_cap_reserve_margin[prr]) *
@@ -212,13 +212,13 @@ def define_components(model):
                 for z in ZONES
                 for g in m.STR_IN_ZONE[z] if m.str_is_distributed[g]
                 
-            )
-            """+ sum(
+            )\
+            + sum(
                 (1 + m.prr_cap_reserve_margin[prr]) * 
                 (m.ChargingPower[ev, t] - m.DischargingPower[ev, t])
                 for z in ZONES
                 for ev in m.EV_IN_ZONE[z]
-            )"""
+            )
 
     model.CapacityRequirements = Expression(
         model.PRR_TIMEPOINTS, rule=CapacityRequirements_rule

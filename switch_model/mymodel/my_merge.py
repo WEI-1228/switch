@@ -22,7 +22,7 @@ def define_components(mod):
         mod.CAPACITY_LIMITED_GENS, within=NonNegativeReals
     )
         
-    # ####这个代码中最核心的部分,关于buildgen的设定
+    #这个代码中最核心的部分,关于buildgen的设定
     mod.PREDETERMINED_GEN_BLD_YRS = Set(dimen=2)
     
     
@@ -164,7 +164,6 @@ def define_components(mod):
         ),
     )
     
-    # 可变成本，这个也很重要，留下
     def period_active_gen_rule(m, period):
         if not hasattr(m, "period_active_gen_dict"):
             m.period_active_gen_dict = dict()
@@ -350,6 +349,12 @@ def define_components(mod):
     # existing plant's lifetime) shouldn't cause any problems.
     # This replaces: mod.min_data_check('gen_max_capacity_factor') from when
     # gen_max_capacity_factor was indexed by VARIABLE_GEN_TPS.
+    # def ak(m, g, t):
+    #     if (g, t) not in m.VARIABLE_GEN_TPS_RAW:
+    #         for i in m.VARIABLE_GENS:
+    #             print(i)
+    #     return (g, t) in m.VARIABLE_GEN_TPS_RAW
+        
     mod.have_minimal_gen_max_capacity_factors = BuildCheck(
         mod.VARIABLE_GEN_TPS, rule=lambda m, g, t: (g, t) in m.VARIABLE_GEN_TPS_RAW
     )
@@ -441,7 +446,7 @@ def define_components(mod):
     mod.VariableCost = Expression(
         mod.TIMEPOINTS,
         rule=lambda m, t: sum(
-            (m.DispatchUpperLimit[g, t] - m.DispatchGen[g, t]) * m.variable_gen_cost[g]/ m.tp_duration_hrs[t]
+            (m.DispatchUpperLimit[g, t] - m.DispatchGen[g, t]) * m.variable_gen_cost[g]#/ m.tp_duration_hrs[t]
                 for g in m.GENS_IN_PERIOD[m.tp_period[t]])
     )
     

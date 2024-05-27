@@ -128,7 +128,7 @@ def define_components(mod):
             z for z in m.LOAD_ZONES if (z, lz) in m.DIRECTIONAL_TX
         ],
     )
-
+    
     def init_trans_d_line(m, zone_from, zone_to):
         for tx in m.TRANSMISSION_LINES:
             if (m.trans_lz1[tx] == zone_from and m.trans_lz2[tx] == zone_to) or (
@@ -148,7 +148,6 @@ def define_components(mod):
     )
     # 虽然只有一条线路江西-湖南，但是调度是双向的，可能从江西到湖南，也可能从湖南到江西
     mod.DispatchTx = Var(mod.TRANS_TIMEPOINTS, within=NonNegativeReals)
-
     # ###调度约束，上限不能超过当前可调度的容量
     mod.Maximum_DispatchTx = Constraint(
         mod.TRANS_TIMEPOINTS,

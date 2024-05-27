@@ -659,7 +659,7 @@ def define_arguments(argparser):
     # These are a subset of the arguments offered by "pyomo solve --solver=cplex --help"
     argparser.add_argument(
         "--solver",
-        default="glpk",
+        default="cplex",
         help='Name of Pyomo solver to use for the model (default is "glpk")',
     )
     argparser.add_argument(

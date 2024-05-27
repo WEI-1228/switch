@@ -1,6 +1,7 @@
 from pyomo.environ import *
 import os, collections
-
+from switch_model.utilities import unique_list
+from switch_model.financials import capital_recovery_factor as crf
 dependencies = (
     "switch_model.generators.core.build",
     "switch_model.timescales"
@@ -23,6 +24,12 @@ def define_components(mod):
         mod.ELECRRIC_VEHICLE_TIMEPOINTS,
         within=NonNegativeReals,
     )
+    
+    mod.ev_status = Param(
+        mod.TIMEPOINTS,
+        within=NonNegativeReals,
+    )
+
     # 这个是电池soc的参数
     mod.ev_min_soc=Param(
         mod.ELECRRIC_VEHICLE,
@@ -43,7 +50,7 @@ def define_components(mod):
         mod.TIMEPOINTS,
         within=NonNegativeReals
     )
-    # 行驶功率
+    # 行驶功率，不用改
     mod.ev_driving_power=Param(
         mod.ELECRRIC_VEHICLE_TIMEPOINTS,
         within=NonNegativeReals,
@@ -74,68 +81,159 @@ def define_components(mod):
         mod.ELECRRIC_VEHICLE_TIMEPOINTS,
         within=NonNegativeReals
     )
-    # # 定义每个省电动汽车充电桩集合，需要age、zone、建立限制
-    # mod.CHARGING_STATION=Set(dimen=1)
-    # # TODO 输入参数 limit
-    # mod.sta_num_limit=Param(mod.CHARGING_STATION, within=PositiveIntegers)    
-    # # TODO 输入参数 age
-    # mod.sta_max_age = Param(mod.CHARGING_STATION, within=PositiveIntegers)    
-    # # TODO 输入参数 load zone
-    # mod.sta_load_zone = Param(mod.CHARGING_STATION, within=mod.LOAD_ZONES)
+    # 定义每个省电动汽车充电桩集合，需要age、zone、建立限制
+    mod.CHARGING_STATION=Set(dimen=1)
+    # TODO 输入参数 limit，这个地方等在改一下,多了一点的问题
+    mod.sta_num_limit=Param(mod.CHARGING_STATION, within=PositiveIntegers)    
+    # 输入参数 age
+    mod.sta_max_age = Param(mod.CHARGING_STATION, within=PositiveIntegers)    
+    # 输入参数 load zone
+    mod.sta_load_zone = Param(mod.CHARGING_STATION, within=mod.LOAD_ZONES)
     
-    # #  TODO，这个集合需要输入，成本
-    # mod.STA_BLD_YRS = Set(
-    #     dimen=2,
-    #     validate=lambda m, g, bld_yr: (
-    #     (g, bld_yr) in m.CHARGING_STATION * m.PERIODS
-    #     ),
-    # )
-    # #
-    # def sta_build_can_operate_in_period(m, g, build_year, period):
-    #     if build_year in m.PERIODS:
-    #         online = m.period_start[build_year]
-    #     else:
-    #         online = build_year
-    #     retirement = online + m.sta_max_age[g]
-    #     return online <= m.period_start[period] < retirement
+    # 这个集合需要输入，成本
+    mod.STA_BLD_YRS = Set(
+        dimen=2,
+        validate=lambda m, g, bld_yr: (
+            (g, bld_yr) in m.CHARGING_STATION * m.PERIODS
+        ),
+    )
+    mod.sta_overnight_cost = Param(mod.STA_BLD_YRS, within=NonNegativeReals)
+    mod.sta_fixed_om = Param(mod.STA_BLD_YRS, within=NonNegativeReals) 
 
-    # mod.BLD_YRS_FOR_STA_PERIOD = Set(
-    #     mod.CHARGING_STATION,
-    #     mod.PERIODS,
-    #     dimen=1,
-    #     initialize=lambda m, g, period: unique_list(
-    #         bld_yr
-    #         for (gen, bld_yr) in m.STA_BLD_YRS
-    #         if gen == g and sta_build_can_operate_in_period(m, g, bld_yr, period)
-    #     ),
-    # )    
-    # # 对每个g和bld-yr决策一个是否要建立新的容量。TODO 这东西嘚是整数
-    # mod.BuildStation = Var(mod.STA_BLD_YRS, within=PositiveIntegers)
-    # # 累计充电桩数量
-    # mod.StaNum = Expression(
-    #     mod.CHARGING_STATION,
-    #     mod.PERIODS,
-    #     rule=lambda m, g, period: sum(
-    #         m.BuildStation[g, bld_yr] for bld_yr in m.BLD_YRS_FOR_STA_PERIOD[g, period]
-    #     ),
-    # )
-    # mod.Max_Build_Potential_For_Station = Constraint(
-    #     mod.CHARGING_STATION,
-    #     mod.PERIODS,
-    #     rule=lambda m, g, p: (m.sta_num_limit[g] >= m.StaNum[g, p]),
-    # )
-    # # 电动汽车可以使用v2g的容量
-    # mod.V2gNum=Expression(
-    #     mod.CHARGING_STATION,
-    #     mod.PERIODS,
-    #     rule=lambda m, g, period: ( m.StaNum[g,period]*70*3/1000),
-    #     )
-    # # 电动汽车最大充放电功率，还要在这个基础上x当前的ev status
+    # 输入g，bld yr和period，得到一个仍然online的规则
+    def sta_build_can_operate_in_period(m, g, build_year, period):
+        if build_year in m.PERIODS:
+            online = m.period_start[build_year]
+        else:
+            online = build_year
+        retirement = online + m.sta_max_age[g]
+        return online <= m.period_start[period] < retirement
     
+    # 对每一个充电桩和决策周期，得到它在这个周期仍然在线的bld yr
+    mod.BLD_YRS_FOR_STA_PERIOD = Set(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        dimen=1,
+        initialize=lambda m, g, period: unique_list(
+            bld_yr
+            for (gen, bld_yr) in m.STA_BLD_YRS
+            if gen == g and sta_build_can_operate_in_period(m, g, bld_yr, period)
+        ),
+    )
+    # 对每一个充电桩，得到它仍然在线的period
+    mod.PERIODS_FOR_STA = Set(
+        mod.CHARGING_STATION,
+        dimen=1,
+        initialize=lambda m, g: [
+            p for p in m.PERIODS if len(m.BLD_YRS_FOR_STA_PERIOD[g, p]) > 0
+        ],
+    )
+    # 充电桩和它在线的period的二维集合
+    mod.STA_PERIODS = Set(
+        dimen=2,
+        initialize=lambda m: [
+            (g, p) for g in m.CHARGING_STATION for p in m.PERIODS_FOR_STA[g]
+        ],
+    )     
+    # # 对每个g和bld-yr决策一个是否要建立新的容量。
+    mod.BuildStation = Var(mod.STA_BLD_YRS, within=PositiveIntegers)
+    #  累计充电桩数量
+    mod.StaNum = Expression(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        rule=lambda m, g, period: sum(
+            m.BuildStation[g, bld_yr] for bld_yr in m.BLD_YRS_FOR_STA_PERIOD[g, period]
+        ),
+    )
+    mod.Max_Build_Potential_For_Station = Constraint(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        rule=lambda m, g, p: (m.sta_num_limit[g] >= m.StaNum[g, p]),
+    )
+    #  电动汽车可以使用v2g的数量
+    mod.V2gNum=Expression(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        rule=lambda m, g, period: (m.StaNum[g, period] * 3),
+    )
+    # 一辆车的最大充放电功率是13kw，能够参与电动汽车v2g的容量   
+    mod.V2gCapacity=Expression(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        rule=lambda m, g, period: (m.V2gNum[g, period] * 13  / 1000),
+    )    
+        
+    #  电动汽车最大充放电功率，还要在这个基础上x当前的ev status
+    mod.MaxDischargingPower = Expression(
+        mod.CHARGING_STATION,
+        mod.TIMEPOINTS,
+        rule=lambda m, s, t: m.V2gCapacity[s, m.tp_period[t]] * m.ev_status[t]
+    )
+    
+    # TODO 能够参与v2g的电动汽车中，行驶消耗的功率,ev status这个地方输入还需要再加上ev_driving_status[t]
+    mod.ev_driving_status = Param(
+        mod.TIMEPOINTS,
+        within=NonNegativeReals,
+    )
+    
+    ###################    
+    # 加一下充电桩的投资和运维成本
+    # 这个interest rate在financial里定义的
+    mod.sta_capital_cost_annual = Param(
+        mod.STA_BLD_YRS,
+        within=NonNegativeReals,
+        initialize=lambda m, g, bld_yr: (
+            (m.sta_overnight_cost[g, bld_yr] )* crf(m.interest_rate, m.sta_max_age[g])
+        ),
+    )
+    # 资本成本
+    mod.StaCapitalCosts = Expression(
+        mod.CHARGING_STATION,
+        mod.PERIODS,
+        rule=lambda m, g, p: sum(
+            m.BuildStation[g, bld_yr] * m.sta_capital_cost_annual[g, bld_yr]
+            for bld_yr in m.BLD_YRS_FOR_STA_PERIOD[g, p]
+        ),
+    )
+    mod.TotalStaFixedCosts = Expression(
+        mod.PERIODS,
+        rule=lambda m, p: sum(
+            m.StaCapitalCosts[g, p]
+            for g in m.CHARGING_STATION
+        ),
+    )
+    mod.Cost_Components_Per_Period.append("TotalStaFixedCosts")
 
+    def period_active_sta_rule(m, period):
+        if not hasattr(m, "period_active_sta_dict"):
+            m.period_active_sta_dict = dict()
+            for (_g, _period) in m.STA_PERIODS:
+                m.period_active_sta_dict.setdefault(_period, []).append(_g)
+        result = m.period_active_sta_dict.pop(period)
+        if len(m.period_active_sta_dict) == 0:
+            delattr(m, "period_active_sta_dict")
+        return result
+
+    #这是一个在给定的period里，能够使用的sta的合集
+    mod.STA_IN_PERIOD = Set(
+        mod.PERIODS,
+        dimen=1,
+        initialize=period_active_sta_rule,
+        doc="The set of stations active in a given period.",
+    )
+    
+    # 电动汽车充电桩运维成本，等于向电动汽车用户购电的成本
+    mod.StaVariableOMCosts = Expression(
+        mod.TIMEPOINTS,
+        rule=lambda m, t: sum(
+            m.DischargingPower[g, t] * m.electricity_price[t]
+            for g in m.STA_IN_PERIOD[m.tp_period[t]]
+        ),
+    )
+    mod.Cost_Components_Per_TP.append("StaVariableOMCosts")   
     #############################################################################
 
-    # TODO
+
     mod.ev_load_zone = Param(mod.ELECRRIC_VEHICLE, within=mod.LOAD_ZONES)
     def EV_IN_ZONE_init(m, z):
         if not hasattr(m, "EV_IN_ZONE_dict"):
@@ -203,7 +301,6 @@ def define_components(mod):
     
     #######################      电池状态约束      #######################
     mod.StateOfChargeOfEV = Var(mod.ELECRRIC_VEHICLE_TIMEPOINTS, within=NonNegativeReals)
-    # TODO
     # 电动汽车的电量需要 小于 电池最大容量
     mod.State_Of_Charge_Upper_Limit_of_Ev_A = Constraint(
         mod.ELECRRIC_VEHICLE_TIMEPOINTS, 
@@ -226,23 +323,33 @@ def define_components(mod):
     #   如果不在充电，就会 <= [最大充电功率 * 0]，也就是 <= 0，但是充电功率定义的是非负值，因此就等于0
     mod.Charging_Power_Constraint = Constraint(
         mod.ELECRRIC_VEHICLE_TIMEPOINTS,
-        rule=lambda m, g, t:m.ChargingPower[g, t] <= m.ev_max_power_mw[g, t] * m.EvCharge[g, t]
+        rule=lambda m, g, t: m.ChargingPower[g, t] <= m.ev_max_power_mw[g, t] 
     )
-    #####################################################################
     
-    
-    
+
+    M = 100000000
+    # 强制不充电时，充电功率为0
+    mod.Charging_Power_Enforce = Constraint(
+        mod.ELECRRIC_VEHICLE_TIMEPOINTS,
+        rule=lambda m, ev, t: m.ChargingPower[ev, t] <= M * m.EvCharge[ev, t]
+    )
     
     #######################   电动汽车放电功率约束   #######################
     # 电动汽车充电功率需要小于最大放电功率 * 是否在放电
     #   如果正在放电，那么就 <= [最大放电功率]
     #   如果不在放电，就会 <= [最大放电功率 * 0]，也就是 <= 0，但是放电功率定义的是非负值，因此就等于0
     def Discharging_Power_Constraint_rule(m, g, t):
-        return m.DischargingPower[g, t] <= m.ev_max_power_mw[g, t] * m.EvDischarge[g, t]
+        return m.DischargingPower[g, t] <= m.MaxDischargingPower[g, t]
     
     mod.Discharging_Power_Constraint = Constraint(
         mod.ELECRRIC_VEHICLE_TIMEPOINTS,
         rule=Discharging_Power_Constraint_rule
+    )
+    
+    # 强制不放电时，放电功率为0
+    mod.DisCharging_Power_Enforce = Constraint(
+        mod.ELECRRIC_VEHICLE_TIMEPOINTS,
+        rule=lambda m, ev, t: m.DischargingPower[ev, t] <= M * m.EvDischarge[ev, t]
     )
     #####################################################################
     
@@ -275,11 +382,13 @@ def define_components(mod):
     def Track_State_Of_Charge_rule_of_EV(m, g, t):
         # if t == "2025.01.22.00":
         # # 设置为初始状态
-        #     return m.StateOfChargeOfEV[g, t] == m.initial_state_of_ev[g] + (
-        #         m.ChargingPower[g, t] * m.ev_storage_efficiency[g]
-        #         - m.DischargingPower[g, t] - m.ev_driving_power[g, t]
-        #     )* m.tp_duration_hrs[t]
-
+            # return m.StateOfChargeOfEV[g, t] == m.initial_state_of_ev[g] + (
+            #     m.ChargingPower[g, t] * m.ev_storage_efficiency[g]
+            #     - m.DischargingPower[g, t] - m.ev_driving_power[g, t]
+            # )* m.tp_duration_hrs[t]
+        
+        
+        # TODO 这个m.V2gDrivingPower[g,t]是否能准确识别到，这个是按充电桩来索引的
         return (
             m.StateOfChargeOfEV[g, t]                                                                                                                                                                                                                                                                       
             == m.StateOfChargeOfEV[g, m.tp_previous[t]]
@@ -295,25 +404,25 @@ def define_components(mod):
     )
     
     ###收益约束
-    def Revenue_Requirements_rule(m, z):
-        discharge_sum = 0
-        charge_sum = 0
-        for t in m.TIMEPOINTS:
-            for g in m.DISSTORAGE_IN_ZONE[z]:
-                discharge_sum += m.DischargeStorage[g, t] * m.electricity_price[t]
-            for ev in m.EV_IN_ZONE[z]:
-                discharge_sum += m.DischargingPower[ev, t] * m.electricity_price[t]
+    # def Revenue_Requirements_rule(m, z):
+    #     discharge_sum = 0
+    #     charge_sum = 0
+    #     for t in m.TIMEPOINTS:
+    #         for g in m.DISSTORAGE_IN_ZONE[z]:
+    #             discharge_sum += m.DischargeStorage[g, t] * m.electricity_price[t]
+    #         for ev in m.EV_IN_ZONE[z]:
+    #             discharge_sum += m.DischargingPower[ev, t] * m.electricity_price[t]
         
-        for t in m.TIMEPOINTS:
-            for g in m.DISSTORAGE_IN_ZONE[z]:
-                charge_sum += m.ChargeStorage[g, t] * m.electricity_price[t]
-            for ev in m.EV_IN_ZONE[z]:
-                charge_sum += m.ChargingPower[ev, t] * m.electricity_price[t]
-        return discharge_sum >= charge_sum
+    #     for t in m.TIMEPOINTS:
+    #         for g in m.DISSTORAGE_IN_ZONE[z]:
+    #             charge_sum += m.ChargeStorage[g, t] * m.electricity_price[t]
+    #         for ev in m.EV_IN_ZONE[z]:
+    #             charge_sum += m.ChargingPower[ev, t] * m.electricity_price[t]
+    #     return discharge_sum >= charge_sum
     
-    mod.Revenue_Requirements_constraint = Constraint(
-        mod.LOAD_ZONES, rule=Revenue_Requirements_rule
-    )
+    # mod.Revenue_Requirements_constraint = Constraint(
+    #     mod.LOAD_ZONES, rule=Revenue_Requirements_rule
+    # )
     
     #####################################################################
 
@@ -328,6 +437,7 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.ev_storage_efficiency
             )
     )
+    
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, "ev_power_parameters.csv"),
         param=(
@@ -335,6 +445,14 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.ev_driving_power
         )
     )
+    
+    
+    # # TODO 导入一下ev num
+    # switch_data.load_aug(
+    #     filename=os.path.join(inputs_dir, "ev_num.csv"),
+    #     param=mod.ev_num
+    # )
+        
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, "ev_init_soc.csv"),
         param=mod.initial_state_of_ev
@@ -344,7 +462,12 @@ def load_inputs(mod, switch_data, inputs_dir):
         filename=os.path.join(inputs_dir, "ev_electricity_price.csv"),
         param=mod.electricity_price
     )
-    
+    switch_data.load_aug(
+        filename=os.path.join(inputs_dir, "ev_station_build_costs.csv"),
+        index=mod.STA_BLD_YRS,
+        param=(mod.sta_overnight_cost, mod.sta_fixed_om),
+    )
+
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, "ev_min_max_soc.csv"),
         param=(
@@ -352,6 +475,27 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.ev_max_soc
         )
     )
+    
+    switch_data.load_aug(
+        filename = os.path.join(inputs_dir, "ev_status.csv"),
+        param=(
+        mod.ev_status,
+        mod.ev_driving_status
+        )
+    )
+    
+    
+    switch_data.load_aug(
+        filename = os.path.join(inputs_dir, "ev_station_info.csv"),
+        index=mod.CHARGING_STATION,
+        param=(
+            mod.sta_num_limit,
+            mod.sta_max_age,
+            mod.sta_load_zone
+        )
+    )
+    
+    
 
 def post_solve(instance, outdir):
     """
