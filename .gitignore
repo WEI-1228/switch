@@ -9,4 +9,4 @@ dist*/
 autodoc*
 !.gitignore
 !.git-blame-ignore-revs
-outputs/
+outputs*
