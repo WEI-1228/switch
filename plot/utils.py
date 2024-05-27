@@ -100,7 +100,9 @@ def plot_by_tps(dataObj, title, xlabel, ylabel, save_path):
         if pltdata:
             ymax = max(ymax, max(pltdata))
         plt.plot(range(len(tps_list)), pltdata, label=data.annotation, marker=data.marker)
-    if ymax < 1000:
+    if ymax < 100:
+        ymax = ymax + 10
+    elif ymax < 1000:
         ymax = ymax + 100
     else:
         ymax = ymax + 1000
