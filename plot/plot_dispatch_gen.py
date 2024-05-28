@@ -38,5 +38,5 @@ for e in energy_list:
             save_path = f"dispatch_gen/avg/{z}/"
         os.makedirs(save_path, exist_ok=True)
         # plot_by_tps([dto, ev_dto], f"{z}-{e}", "Timepoints", "MW", save_path + f"{e}.jpg")
-        plot_by_tps([dto, ev_dto], f"{z}-{e}", "Timepoints", "MW", save_path + f"{e}.jpg")
+        plot_by_tps([ev_dto], f"{z}-{e}", "Timepoints", "MW", save_path + f"{e}.jpg")
     print()
