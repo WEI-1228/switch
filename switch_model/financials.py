@@ -36,7 +36,8 @@ def capital_recovery_factor(ir, t):
     rate, paid over 20 years is 0.09439. If the principal was $100, loan\
     payments would be $9.44
     """
-    return 1 / t if ir == 0 else ir / (1 - (1 + ir) ** -t)
+    # 这里改过咯，这个也没太大的差别
+    return 1 / t if ir == 0 else ir / ((1 + ir) * (1 - (1 + ir) ** -t))
 
 
 def uniform_series_to_present_value(dr, t):
@@ -59,7 +60,7 @@ def uniform_series_to_present_value(dr, t):
     Test for calculation validity compared to CRF using 7 decimal points
     >>> round(uniform_series_to_present_value(.07,20),7) == \
         round(1/capital_recovery_factor(.07,20),7)
-    True
+    True - 4.1
     """
     return t if dr == 0 else (1 - (1 + dr) ** -t) / dr
 
@@ -71,6 +72,7 @@ def future_to_present_value(dr, t):
     Example:
     >>> round(future_to_present_value(.07,10),7)
     0.5083493
+    0.41496444788853737
     """
     return (1 + dr) ** -t
 

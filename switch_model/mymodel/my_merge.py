@@ -440,17 +440,17 @@ def define_components(mod):
     
     # 弃风弃光惩罚成本
     # TODO 还未加载
-    mod.variable_gen_cost = Param(mod.GENERATION_PROJECTS, within=NonNegativeReals)
+    # mod.variable_gen_cost = Param(mod.GENERATION_PROJECTS, within=NonNegativeReals)
     
     
-    mod.VariableCost = Expression(
-        mod.TIMEPOINTS,
-        rule=lambda m, t: sum(
-            (m.DispatchUpperLimit[g, t] - m.DispatchGen[g, t]) * m.variable_gen_cost[g]#/ m.tp_duration_hrs[t]
-                for g in m.GENS_IN_PERIOD[m.tp_period[t]])
-    )
+    # mod.VariableCost = Expression(
+    #     mod.TIMEPOINTS,
+    #     rule=lambda m, t: sum(
+    #         m.DispatchSlackUp[g, t] * m.variable_gen_cost[g]#/ m.tp_duration_hrs[t]
+    #             for g in m.GENS_IN_PERIOD[m.tp_period[t]])
+    # )
     
-    mod.Cost_Components_Per_TP.append("VariableCost")
+    # mod.Cost_Components_Per_TP.append("VariableCost")
     
     # Costs
     mod.gen_variable_om = Param(mod.GENERATION_PROJECTS, within=NonNegativeReals)
@@ -598,7 +598,7 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.gen_min_build_capacity,
             mod.gen_connect_cost_per_mw,
             mod.gen_is_distributed,
-            mod.variable_gen_cost
+            #mod.variable_gen_cost
         ),
     )
     
@@ -647,3 +647,40 @@ def load_inputs(mod, switch_data, inputs_dir):
             mod.gen_min_load_fraction_TP,
         ),
     )
+    
+
+def post_solve(m, outdir):
+    # report generator and storage additions in each period and and total
+    # capital outlay for those (up-front capital outlay is not treated as a
+    # direct cost by Switch, but is often interesting to users)
+    write_table(
+        m,
+        m.GEN_TPS,
+        output_file=os.path.join(outdir, "DispatchSlackUp.csv"),
+        headings=(
+            "GENERATION_PROJECT",
+            "timepoints",
+            "dispatch_slack_up",
+        ),
+        values=lambda m, g, t: (
+            g,
+            t,
+            m.DispatchSlackUp[g, t]
+        ),
+    )
+
+    
+    # write_table(
+    #     m,
+    #     m.TIMEPOINTS,
+    #     output_file=os.path.join(outdir, "VariableCost.csv"),
+    #     headings=(
+    #         "timepoints",
+    #         "variable_cost",
+    #     ),
+    #     values=lambda m, t: (
+    #         t,
+    #         m.VariableCost[t]
+    #     ),
+    # )
+    

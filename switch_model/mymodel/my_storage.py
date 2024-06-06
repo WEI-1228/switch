@@ -296,7 +296,13 @@ def define_components(mod):
     mod.State_Of_Charge_Upper_Limit = Constraint(
         mod.STR_TPS, rule=State_Of_Charge_Upper_Limit_rule
     )
-
+    # 电池状态还嘚大于0
+    def State_Of_Charge_Lower_Limit_rule(m, g, t):
+        return m.StateOfCharge[g, t] >= 0
+    mod.State_Of_Charge_Lower_Limit_rule= Constraint(
+        mod.STR_TPS, rule=State_Of_Charge_Lower_Limit_rule
+    )
+    
     ########
     # 三种电池的区别，gen is re- connected，gen is gird-connected，gen is distributed
 

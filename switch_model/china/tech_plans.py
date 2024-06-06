@@ -28,6 +28,24 @@ def define_components(mod):
         dimen=2,
         within=mod.ENERGY_SOURCES * mod.PERIODS)
     mod.total_capacity_limit_mw = Param(mod.TOTAL_CAPACITY_LIMIT_INDEX)
+    
+    def GENS_BY_ENERGY_SOURCE_init(m, e):
+        if not hasattr(m, "GENS_BY_ENERGY_dict"):
+            m.GENS_BY_ENERGY_dict = {_e: [] for _e in m.ENERGY_SOURCES}
+            for g in m.GENERATION_PROJECTS:
+                if g in m.FUEL_BASED_GENS:
+                    for f in m.FUELS_FOR_GEN[g]:
+                        m.GENS_BY_ENERGY_dict[f].append(g)
+                else:
+                    m.GENS_BY_ENERGY_dict[m.gen_energy_source[g]].append(g)
+        result = m.GENS_BY_ENERGY_dict.pop(e)
+        if not m.GENS_BY_ENERGY_dict:
+            del m.GENS_BY_ENERGY_dict
+        return result
+
+    mod.GENS_BY_ENERGY_SOURCE = Set(
+        mod.ENERGY_SOURCES, dimen=1, initialize=GENS_BY_ENERGY_SOURCE_init
+    )    
 
     # Only track for entries we are tracking to save time & RAM
     mod.CapacityByEnergySourceZonePeriod = Expression(
@@ -75,12 +93,10 @@ def load_inputs(mod, switch_data, inputs_dir):
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, 'capacity_plans.csv'),
         optional=True,
-        auto_select=True,
         index=mod.CAPACITY_PLAN_INDEX,
         param=(mod.planned_capacity_mw,))
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, 'total_capacity_limits.csv'),
         optional=True,
-        auto_select=True,
         index=mod.TOTAL_CAPACITY_LIMIT_INDEX,
         param=(mod.total_capacity_limit_mw,))

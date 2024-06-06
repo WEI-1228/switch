@@ -3,8 +3,8 @@ import os
 
 energy_list = ['Coal', 'Gas', 'Nuclear']
 
-noev_csv_path = "/home/ljw/switch/input1/outputs-不带电动汽车/DispatchGen.csv"
-ev_csv_path = "/home/ljw/switch/input1/outputs-带电动汽车/DispatchGen.csv"
+noev_csv_path = "/home/ljw2022/switch/input/outputs/DispatchGen.csv"
+ev_csv_path = "/home/ljw2022/switch/input/outputs/DispatchGen.csv"
 
 print("正在加载数据")
 _, data_list, zones = parse_input(noev_csv_path)

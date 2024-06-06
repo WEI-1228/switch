@@ -10,11 +10,14 @@ switch_model.reporting
 switch_model.mymodel.my_merge
 switch_model.mymodel.my_fuel_cost
 switch_model.generators.core.commit.fuel_use
+switch_model.generators.extensions.hydro_simple
 switch_model.mymodel.my_co2_cost
 switch_model.transmission.local_td
 switch_model.mymodel.my_transmission
-switch_model.mymodel.my_storage
-# switch_model.mymodel.my_ev
-switch_model.mymodel.my_planning_reverse
-switch_model.mymodel.my_spinning_reverse
+# switch_model.mymodel.my_storage
+# switch_model.mymodel.my_ev_station
+# switch_model.mymodel.my_ev_only_charge
+# switch_model.mymodel.my_planning_reverse
+# switch_model.mymodel.my_spinning_reverse
+switch_model.china.tech_plans
 # switch_model.balancing.diagnose_infeasibility

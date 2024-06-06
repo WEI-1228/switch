@@ -20,11 +20,11 @@ optional_dependencies = "switch_model.transmission.local_td"
 
 
 def define_components(mod):
-    mod.gen_energy_source = Param(
-        mod.GENERATION_PROJECTS,
-        validate=lambda m, val, g: val in m.ENERGY_SOURCES or val == "multiple",
-        within=Any,
-    )   
+    # mod.gen_energy_source = Param(
+    #     mod.GENERATION_PROJECTS,
+    #     validate=lambda m, val, g: val in m.ENERGY_SOURCES or val == "multiple",
+    #     within=Any,
+    # )   
     
     mod.gen_uses_fuel = Param(
         mod.GENERATION_PROJECTS,
@@ -157,7 +157,7 @@ def load_inputs(mod, switch_data, inputs_dir):
     switch_data.load_aug(
         filename=os.path.join(inputs_dir, "gen_info.csv"),
         param=(
-            mod.gen_energy_source,
+            # mod.gen_energy_source,
             mod.gen_full_load_heat_rate,
             mod.gen_startup_fuel
         ),
