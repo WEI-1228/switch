@@ -164,6 +164,16 @@ def define_components(mod):
         ),
     )
     
+    # def period_active_gen_rule(m, period):
+    #     if not hasattr(m, "period_active_gen_dict"):
+    #         m.period_active_gen_dict = dict()
+    #         for (_g, _period) in m.GEN_PERIODS:
+    #             m.period_active_gen_dict.setdefault(_period, []).append(_g)
+    #     result = m.period_active_gen_dict.pop(period)
+    #     if len(m.period_active_gen_dict) == 0:
+    #         delattr(m, "period_active_gen_dict")
+    #     return result
+    
     def period_active_gen_rule(m, period):
         if not hasattr(m, "period_active_gen_dict"):
             m.period_active_gen_dict = dict()
